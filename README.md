@@ -1,5 +1,7 @@
 # Controle Piscina (ESPHome)
 
+> ⚠️ **Projeto em teste.** Ainda está na bancada (ESP32 de teste, sensores NTC ainda não instalados) e não substituiu o Tholz MMZ na piscina. As seguranças ainda não foram testadas com temperaturas reais. Use por sua conta e risco e mantenha as proteções elétricas (relé térmico e DR).
+
 Controlador diferencial de aquecimento solar de piscina em **ESPHome**, feito para substituir um **Tholz MMZ1195N** — e que também comanda a **bomba do filtro**. Toda a lógica do aquecimento roda no próprio ESP32: continua funcionando sem Wi-Fi ou Home Assistant.
 
 - 2 sensores NTC 10K (piscina e coletores) — compatível com os sensores originais da Tholz (B = 3980)
