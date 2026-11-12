@@ -1,0 +1,111 @@
+# Automação do Home Assistant: avisos do Controle Piscina em Configurações → Reparos.
+# Requer a integração Spook (Marketplace) para as ações repairs.create / repairs.remove.
+# Para usar: Configurações → Automações → Criar → ⋮ → Editar em YAML → colar.
+alias: Controle Piscina — avisos em Reparos
+description: >-
+  Cria/remove problemas em Configurações → Reparos (via Spook) para o ESP Controle Piscina:
+  falha de sensor NTC, ESP offline e Wi-Fi fraco. Reavalia a cada mudança e a cada 5 min.
+mode: queued
+max: 5
+triggers:
+  - trigger: state
+    entity_id:
+      - binary_sensor.controle_piscina_falha_sensor_temperatura
+      - sensor.controle_piscina_uptime
+      - sensor.controle_piscina_wi_fi_sinal_pct
+  - trigger: time_pattern
+    minutes: /5
+  - trigger: homeassistant
+    event: start
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: binary_sensor.controle_piscina_falha_sensor_temperatura
+            state: "on"
+            for:
+              minutes: 5
+        sequence:
+          - action: repairs.create
+            data:
+              issue_id: controle_piscina_falha_sensor
+              domain: esphome
+              severity: error
+              persistent: true
+              title: "Controle Piscina: falha no sensor de temperatura"
+              description: |-
+                Um dos NTC (piscina ou coletor) está aberto ou em curto há mais de 5 min. Com falha de sensor, o modo Automático **desliga a bomba de aquecimento**.
+
+                Confira os fios e o divisor (10k do 3V3 ao GPIO, NTC do GPIO ao GND). No GPIO: ~1,6 V ok · ~3,3 V NTC aberto · ~0 V curto ou resistor sem 3V3.
+
+                O aviso some sozinho quando os dois sensores voltarem a ler.
+      - conditions:
+          - condition: state
+            entity_id: binary_sensor.controle_piscina_falha_sensor_temperatura
+            state: "off"
+        sequence:
+          - action: repairs.remove
+            continue_on_error: true
+            data:
+              issue_id: controle_piscina_falha_sensor
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: sensor.controle_piscina_uptime
+            state: unavailable
+            for:
+              minutes: 5
+        sequence:
+          - action: repairs.create
+            data:
+              issue_id: controle_piscina_offline
+              domain: esphome
+              severity: critical
+              persistent: true
+              title: "Controle Piscina: ESP offline"
+              description: |-
+                O ESP do Controle Piscina está sem comunicação com o HA há mais de 5 min.
+
+                A lógica do aquecimento continua rodando no ESP se ele estiver ligado, mas o HA não consegue ver nem comandar as bombas. Verifique energia, Wi-Fi e o LED azul da placa (pisca rápido = sem rede).
+
+                O aviso some sozinho quando ele voltar.
+      - conditions:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: sensor.controle_piscina_uptime
+                state:
+                  - unavailable
+                  - unknown
+        sequence:
+          - action: repairs.remove
+            continue_on_error: true
+            data:
+              issue_id: controle_piscina_offline
+  - choose:
+      - conditions:
+          - condition: numeric_state
+            entity_id: sensor.controle_piscina_wi_fi_sinal_pct
+            below: 30
+        sequence:
+          - action: repairs.create
+            data:
+              issue_id: controle_piscina_wifi_fraco
+              domain: esphome
+              severity: warning
+              persistent: true
+              title: "Controle Piscina: sinal Wi-Fi fraco"
+              description: |-
+                O sinal Wi-Fi do Controle Piscina está abaixo de 30%. Pode causar quedas de comunicação com o HA. Considere reposicionar a placa/antena ou o AP.
+
+                O aviso some quando o sinal passar de 40%.
+      - conditions:
+          - condition: numeric_state
+            entity_id: sensor.controle_piscina_wi_fi_sinal_pct
+            above: 40
+        sequence:
+          - action: repairs.remove
+            continue_on_error: true
+            data:
+              issue_id: controle_piscina_wifi_fraco

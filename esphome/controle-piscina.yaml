@@ -1,0 +1,491 @@
+# Controle da piscina: aquecimento solar diferencial (substitui o Tholz MMZ) + bomba do filtro
+# ESP32 + 2 NTC 10K + 2 relés (contatores da bomba de aquecimento e da bomba do filtro)
+# Toda a lógica do aquecimento roda no ESP: funciona mesmo sem Wi-Fi/Home Assistant.
+
+substitutions:
+  name: controle-piscina
+  friendly_name: Controle Piscina
+  # B do NTC: os sensores originais do Tholz MMZ são NTC 10K 1% B=3980/25 °C
+  ntc_beta: "3980"
+  # Tempo mínimo entre liga/desliga automáticos (protege contator e bomba)
+  tempo_minimo_ms: "180000"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: acender_tela
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key_aquecimento
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Controle Piscina"
+
+captive_portal:
+
+# ---------------- Display OLED SSD1306 128x64 (I2C) ----------------
+# VCC -> 3V3 | GND -> GND | SCL/SCK -> IO22 | SDA -> IO21
+# Se a imagem aparecer deslocada/com chuvisco na borda, o chip é SH1106:
+# troque o model para "SH1106 128x64".
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+
+font:
+  - file: "gfonts://Roboto Condensed@700"
+    id: f_grande
+    size: 20
+    glyphs: "0123456789.-°"
+  - file: "gfonts://Roboto Condensed"
+    id: f_peq
+    size: 11
+    glyphsets: [GF_Latin_Core]
+
+display:
+  - platform: ssd1306_i2c
+    id: tela
+    model: "SSD1306 128x64"
+    address: 0x3C
+    update_interval: 2s
+    lambda: |-
+      // Linha 1: títulos
+      it.print(0, 0, id(f_peq), "Piscina");
+      it.print(127, 0, id(f_peq), TextAlign::TOP_RIGHT, "Coletor");
+      // Linha 2: temperaturas grandes
+      auto temp = [&](int x, TextAlign a, float v) {
+        if (isnan(v)) it.print(x, 13, id(f_grande), a, "--.-");
+        else it.printf(x, 13, id(f_grande), a, "%.1f°", v);
+      };
+      temp(0, TextAlign::TOP_LEFT, id(t_piscina).state);
+      temp(127, TextAlign::TOP_RIGHT, id(t_coletor).state);
+      it.horizontal_line(0, 38, 128);
+      // Linha 3: bombas de aquecimento e do filtro
+      it.printf(0, 40, id(f_peq), "Aquec. %s", id(rele_bomba).state ? "ON" : "off");
+      it.printf(127, 40, id(f_peq), TextAlign::TOP_RIGHT, "Filtro %s", id(rele_filtro).state ? "ON" : "off");
+      // Linha 4: diferencial e, alternando a cada 4 s, modo / Wi-Fi
+      const float d = id(t_coletor).state - id(t_piscina).state;
+      if (isnan(d)) it.print(0, 52, id(f_peq), "Dif --");
+      else it.printf(0, 52, id(f_peq), "Dif %+.1f°", d);
+      if ((millis() / 4000) % 2 == 0) {
+        auto idx = id(modo).active_index();
+        const char *m[] = {"AUTO", "LIGADO", "DESLIG."};
+        it.print(127, 52, id(f_peq), TextAlign::TOP_RIGHT, idx.has_value() ? m[*idx] : "?");
+      } else {
+        const float w = id(wifi_pct).state;
+        if (isnan(w)) it.print(127, 52, id(f_peq), TextAlign::TOP_RIGHT, "Wi-Fi --");
+        else it.printf(127, 52, id(f_peq), TextAlign::TOP_RIGHT, "Wi-Fi %.0f%%", w);
+      }
+
+# ---------------- LED azul da placa (GPIO2) ----------------
+# Pisca lento (1 s aceso / 1 s apagado): Wi-Fi e Home Assistant conectados
+# Pisca rápido (0,1 s / 0,1 s): procurando rede ou sem conexão com o HA
+output:
+  - platform: gpio
+    id: led_placa
+    pin: GPIO2
+
+globals:
+  - id: ultima_mudanca
+    type: uint32_t
+    initial_value: "0"
+  # Início do modo Ligado (manual), para o tempo máximo
+  - id: inicio_manual
+    type: uint32_t
+    initial_value: "0"
+  # Bloqueio por sobreaquecimento do coletor (histerese de 2 °C)
+  - id: bloqueio_sobreaq
+    type: bool
+    initial_value: "false"
+
+# ---------------- Saídas: relés (aquecimento GPIO26, filtro GPIO27) ----------------
+switch:
+  # Liga/desliga manual da bomba pelo HA (troca o Modo para Ligado/Desligado;
+  # para voltar ao controle automático, selecione Modo = Automático)
+  - platform: template
+    name: "Bomba aquecimento"
+    icon: mdi:pump
+    lambda: return id(rele_bomba).state;
+    turn_on_action:
+      - select.set:
+          id: modo
+          option: "Ligado"
+    turn_off_action:
+      - select.set:
+          id: modo
+          option: "Desligado"
+
+  # Proteção da piscina no manual (como o F-9 do MMZ): com a piscina na
+  # temperatura máxima, o modo Ligado é cancelado e volta para Automático
+  - platform: template
+    id: protecao_manual
+    name: "Proteção temperatura máxima no manual"
+    icon: mdi:shield-sun
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+  # Relé da bobina do contator (interno: quem comanda é a lógica)
+  - platform: gpio
+    id: rele_bomba
+    pin: GPIO26
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: id(ultima_mudanca) = millis();
+    on_turn_off:
+      - lambda: id(ultima_mudanca) = millis();
+
+  # Relé da bomba do filtro (comando direto pelo HA; volta ao último estado após reiniciar)
+  - platform: gpio
+    id: rele_filtro
+    name: "Bomba filtro"
+    icon: mdi:pump
+    pin: GPIO27
+    restore_mode: RESTORE_DEFAULT_OFF
+
+# Botões no HA (além do botão físico no IO14)
+button:
+  - platform: template
+    name: "Acender tela"
+    icon: mdi:monitor
+    on_press:
+      - script.execute: acender_tela
+  - platform: restart
+    name: "Reiniciar"
+
+binary_sensor:
+  # Botão físico (IO14 -> GND): toque curto acende a tela; segurar 2 s troca o Modo
+  - platform: gpio
+    id: botao
+    pin:
+      number: GPIO14
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_click:
+      - min_length: 30ms
+        max_length: 1s
+        then:
+          - script.execute: acender_tela
+      - min_length: 2s
+        max_length: 6s
+        then:
+          - select.next:
+              id: modo
+              cycle: true
+          - script.execute: acender_tela
+  - platform: template
+    name: "Bomba aquecimento ligada"
+    lambda: return id(rele_bomba).state;
+  - platform: template
+    name: "Falha sensor temperatura"
+    device_class: problem
+    lambda: return isnan(id(t_piscina).state) || isnan(id(t_coletor).state);
+
+# ---------------- Modo de operação ----------------
+select:
+  - platform: template
+    id: modo
+    name: "Modo"
+    icon: mdi:solar-power
+    optimistic: true
+    restore_value: true
+    options:
+      - "Automático"
+      - "Ligado"
+      - "Desligado"
+    initial_option: "Automático"
+    on_value:
+      # i = índice da opção escolhida (1 = Ligado)
+      - lambda: if (i == 1) id(inicio_manual) = millis();
+      - script.execute: avaliar
+
+# ---------------- Parâmetros (ajustáveis pelo HA, ficam salvos no ESP) ----------------
+number:
+  - platform: template
+    id: delta_liga
+    name: "Diferencial liga"
+    unit_of_measurement: "°C"
+    min_value: 2
+    max_value: 20
+    step: 0.5
+    initial_value: 7
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: delta_desliga
+    name: "Diferencial desliga"
+    unit_of_measurement: "°C"
+    min_value: 0.5
+    max_value: 15
+    step: 0.5
+    initial_value: 3
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: temp_max
+    name: "Temperatura máxima piscina"
+    unit_of_measurement: "°C"
+    min_value: 20
+    max_value: 40
+    step: 0.5
+    initial_value: 31
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: temp_anticongelamento
+    name: "Anticongelamento coletor"
+    unit_of_measurement: "°C"
+    min_value: 0
+    max_value: 10
+    step: 0.5
+    initial_value: 3
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  # Sobreaquecimento do coletor (F-4 do MMZ): desliga a bomba acima deste valor,
+  # volta 2 °C abaixo. Protege os canos (PVC) contra água muito quente.
+  - platform: template
+    id: temp_sobreaquecimento
+    name: "Sobreaquecimento coletor"
+    icon: mdi:thermometer-alert
+    unit_of_measurement: "°C"
+    min_value: 40
+    max_value: 120
+    step: 1
+    initial_value: 70
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  # Tempo máximo do modo Ligado (item 8.5 do MMZ): depois disso volta para Automático
+  - platform: template
+    id: tempo_max_manual
+    name: "Tempo máximo modo manual"
+    icon: mdi:timer-outline
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 24
+    step: 1
+    initial_value: 6
+    optimistic: true
+    restore_value: true
+    entity_category: config
+
+# ---------------- Sensores NTC ----------------
+# Divisor: 3V3 --- 10k (1%) --- [GPIO] --- NTC --- GND   (+100 nF do GPIO ao GND)
+sensor:
+  # Piscina (reservatório)
+  - platform: adc
+    id: adc_piscina
+    pin: GPIO34
+    attenuation: 12db
+    update_interval: 2s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 5
+  - platform: resistance
+    id: res_piscina
+    sensor: adc_piscina
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+    reference_voltage: 3.3V
+    filters:
+      # Fora da faixa = sensor aberto ou em curto -> NAN (falha)
+      - lambda: |-
+          if (x < 300 || x > 150000) return NAN;
+          return x;
+  - platform: ntc
+    id: t_piscina
+    name: "Temperatura piscina"
+    sensor: res_piscina
+    calibration:
+      b_constant: ${ntc_beta}
+      reference_temperature: 25°C
+      reference_resistance: 10kOhm
+    filters:
+      - offset: 0.0   # ajuste fino comparando com termômetro
+      - sliding_window_moving_average:
+          window_size: 3
+          send_every: 1
+
+  # Coletores
+  - platform: adc
+    id: adc_coletor
+    pin: GPIO35
+    attenuation: 12db
+    update_interval: 2s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 5
+  - platform: resistance
+    id: res_coletor
+    sensor: adc_coletor
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+    reference_voltage: 3.3V
+    filters:
+      - lambda: |-
+          if (x < 300 || x > 150000) return NAN;
+          return x;
+  - platform: ntc
+    id: t_coletor
+    name: "Temperatura coletor"
+    sensor: res_coletor
+    calibration:
+      b_constant: ${ntc_beta}
+      reference_temperature: 25°C
+      reference_resistance: 10kOhm
+    filters:
+      - offset: 0.0
+      - sliding_window_moving_average:
+          window_size: 3
+          send_every: 1
+
+  - platform: template
+    name: "Diferencial coletor-piscina"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: return id(t_coletor).state - id(t_piscina).state;
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: wifi_signal
+    id: wifi_dbm
+    name: "Wi-Fi sinal"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: copy
+    id: wifi_pct
+    source_id: wifi_dbm
+    name: "Wi-Fi sinal %"
+    unit_of_measurement: "%"
+    device_class: ""
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: mdi:wifi
+    entity_category: diagnostic
+    filters:
+      # -100 dBm = 0%  ...  -50 dBm = 100%
+      - lambda: return std::min(std::max(2.0f * (x + 100.0f), 0.0f), 100.0f);
+
+text_sensor:
+  - platform: template
+    id: estado
+    name: "Estado"
+    icon: mdi:information-outline
+
+# ---------------- Lógica ----------------
+interval:
+  - interval: 10s
+    then:
+      - script.execute: avaliar
+  - interval: 100ms
+    then:
+      - lambda: |-
+          static uint8_t t = 0;
+          t = (t + 1) % 20;
+          const bool online = wifi::global_wifi_component->is_connected() &&
+                              api::global_api_server->is_connected();
+          const bool aceso = online ? (t < 10) : (t % 2 == 0);
+          if (aceso) id(led_placa).turn_on(); else id(led_placa).turn_off();
+
+script:
+  # Tela fica acesa 60 s após o boot, o botão físico ou o 'Acender tela' do HA, depois apaga (evita burn-in)
+  - id: acender_tela
+    mode: restart
+    then:
+      - lambda: id(tela).turn_on();
+      - delay: 60s
+      - lambda: id(tela).turn_off();
+
+  - id: avaliar
+    mode: queued
+    max_runs: 2
+    then:
+      - lambda: |-
+          const float tp = id(t_piscina).state;
+          const float tc = id(t_coletor).state;
+          const bool ligada = id(rele_bomba).state;
+          auto idx = id(modo).active_index();
+          int m = idx.has_value() ? (int) *idx : 0;   // 0 auto, 1 ligado, 2 desligado
+          const bool tempo_ok = (millis() - id(ultima_mudanca)) >= ${tempo_minimo_ms};
+
+          // Modo Ligado: volta para Automático após o tempo máximo (8.5 do MMZ)
+          // ou se a piscina atingir a temperatura máxima com a proteção ligada (F-9)
+          if (m == 1) {
+            const uint32_t limite_ms = (uint32_t) (id(tempo_max_manual).state * 3600000.0f);
+            const bool expirou = (millis() - id(inicio_manual)) >= limite_ms;
+            const bool piscina_max = id(protecao_manual).state && !isnan(tp) && tp >= id(temp_max).state;
+            if (expirou || piscina_max) {
+              ESP_LOGW("controle", "Modo Ligado cancelado (%s), voltando para Automático",
+                       expirou ? "tempo máximo" : "piscina na temperatura máxima");
+              auto call = id(modo).make_call();
+              call.set_option("Automático");
+              call.perform();
+              m = 0;
+            }
+          }
+
+          // Sobreaquecimento do coletor com histerese de 2 °C (F-4 do MMZ)
+          if (!isnan(tc)) {
+            if (tc >= id(temp_sobreaquecimento).state) id(bloqueio_sobreaq) = true;
+            else if (tc < id(temp_sobreaquecimento).state - 2.0f) id(bloqueio_sobreaq) = false;
+          }
+
+          bool quer = ligada;
+          std::string motivo;
+
+          if (!isnan(tc) && tc <= id(temp_anticongelamento).state) {
+            // Proteção contra geada: circula água da piscina nos coletores (vale em qualquer modo)
+            quer = true; motivo = "Anticongelamento";
+          } else if (m == 2) {
+            quer = false; motivo = "Manual: desligado";
+          } else if (id(bloqueio_sobreaq)) {
+            // Vale no Automático e no Ligado; desliga na hora (sem esperar o tempo mínimo)
+            quer = false; motivo = "Coletor superaquecido";
+          } else if (m == 1) {
+            quer = true; motivo = "Manual: ligado";
+          } else if (isnan(tp) || isnan(tc)) {
+            quer = false; motivo = "Falha de sensor";
+          } else if (tp >= id(temp_max).state || (!ligada && tp > id(temp_max).state - 0.5f)) {
+            quer = false; motivo = "Piscina na temperatura máxima";
+          } else {
+            const float d = tc - tp;
+            if (!ligada && d >= id(delta_liga).state) quer = true;
+            else if (ligada && d <= id(delta_desliga).state) quer = false;
+            if (quer != ligada && !tempo_ok) quer = ligada;   // segura o tempo mínimo
+            motivo = quer ? "Aquecendo" : "Aguardando sol";
+          }
+
+          if (quer && !ligada) id(rele_bomba).turn_on();
+          if (!quer && ligada) id(rele_bomba).turn_off();
+          if (id(estado).state != motivo) id(estado).publish_state(motivo);
