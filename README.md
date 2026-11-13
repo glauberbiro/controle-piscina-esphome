@@ -67,9 +67,7 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 | 3V3 dos divisores | 3V3 | 1 |
 | GND dos NTC | GND | 2 |
 
-Não use GPIO47/48 (pinos 5 e 6): são do touch. Diagrama: [`docs/ligacoes-waveshare-s3.png`](docs/ligacoes-waveshare-s3.png)
-
-![Ligações Waveshare](docs/ligacoes-waveshare-s3.png)
+Não use GPIO47/48 (pinos 5 e 6): são do touch. Pinagem oficial da placa: [wiki da Waveshare/Spotpear](https://spotpear.com/wiki/ESP32-S3-Touch-LCD-2-User-Guide.html).
 
 Na tela: temperaturas, diferença, Wi-Fi, estado, caixas de **aquecimento** (indicação) e **filtro** (tocar liga/desliga) e os botões de modo AUTO / LIGAR / DESL. A tela apaga após 2 min sem toque; um toque (ou o botão "Acender tela" do HA) acorda.
 
