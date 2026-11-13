@@ -1,12 +1,13 @@
 # Controle da piscina: aquecimento solar diferencial (substitui o Tholz MMZ) + bomba do filtro
 # Placa: Waveshare ESP32-S3-Touch-LCD-2 (ST7789 240x320 + touch CST816D)
-# 2 NTC 10K + 1 relé (bobina do contator 110 V da bomba de aquecimento)
-# Toda a lógica roda no ESP: funciona mesmo sem Wi-Fi/Home Assistant.
+# 2 NTC 10K + 2 relés (contatores da bomba de aquecimento e da bomba do filtro)
+# Toda a lógica do aquecimento roda no ESP: funciona mesmo sem Wi-Fi/Home Assistant.
 #
 # Ligações no conector:
-#   NTC piscina  -> GPIO6  (P1-3)     3V3 dos divisores -> P2-1
-#   NTC coletor  -> GPIO7  (P1-9)     GND               -> P1-13 / P2-2
-#   Relé (IN)    -> GPIO17 (P1-5)     5V do relé        -> P1-14
+#   NTC piscina          -> GPIO6  (P1-3)     3V3 dos divisores -> P2-1
+#   NTC coletor          -> GPIO7  (P1-9)     GND               -> P1-13 / P2-2
+#   Relé aquecimento IN  -> GPIO17 (P1-5)     5V dos relés      -> P1-14
+#   Relé filtro IN       -> GPIO18 (P1-6)
 # Divisor de cada NTC: 3V3 --- 10k (1%) --- [GPIO] --- NTC --- GND  (+100 nF do GPIO ao GND)
 
 substitutions:
@@ -31,7 +32,9 @@ esphome:
   on_boot:
     priority: -100
     then:
+      - lambda: id(ui_pronto) = true;
       - script.execute: atualizar_botoes_modo
+      - script.execute: atualizar_saidas
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -72,6 +75,10 @@ globals:
     initial_value: "0"
   # Bloqueio por sobreaquecimento do coletor (histerese de 2 °C)
   - id: bloqueio_sobreaq
+    type: bool
+    initial_value: "false"
+  # A tela só é atualizada depois do boot (os relés mudam de estado antes de o LVGL existir)
+  - id: ui_pronto
     type: bool
     initial_value: "false"
 
@@ -126,9 +133,7 @@ touchscreen:
       - if:
           condition: lvgl.is_paused
           then:
-            - lvgl.resume:
-            - lvgl.widget.redraw:
-            - light.turn_on: backlight
+            - script.execute: acender_tela
 
 font:
   - file: "gfonts://Roboto Condensed@700"
@@ -216,11 +221,12 @@ lvgl:
             text: "--.-°C"
             text_font: f_media
             text_color: ${cor_texto}
+        # Estado da bomba de aquecimento (só indicação; quem manda é o Modo)
         - obj:
             id: caixa_bomba
             x: 12
             y: 166
-            width: 216
+            width: 104
             height: 48
             radius: 10
             border_width: 0
@@ -230,9 +236,31 @@ lvgl:
               - label:
                   id: lbl_bomba
                   align: CENTER
-                  text: "BOMBA DESLIGADA"
-                  text_font: f_media
+                  text_align: CENTER
+                  text: "AQUECIMENTO\nDESLIGADO"
+                  text_font: f_pequena
                   text_color: ${cor_texto}
+        # Bomba do filtro: tocar liga/desliga
+        - button:
+            id: btn_filtro
+            x: 124
+            y: 166
+            width: 104
+            height: 48
+            radius: 10
+            border_width: 0
+            shadow_width: 0
+            bg_color: ${cor_off}
+            widgets:
+              - label:
+                  id: lbl_filtro
+                  align: CENTER
+                  text_align: CENTER
+                  text: "FILTRO\nDESLIGADO"
+                  text_font: f_pequena
+                  text_color: ${cor_texto}
+            on_click:
+              - switch.toggle: rele_filtro
         - label:
             id: lbl_estado
             align: TOP_MID
@@ -295,7 +323,7 @@ lvgl:
                   id: modo
                   option: "Desligado"
 
-# ---------------- Saída: relé da bobina do contator ----------------
+# ---------------- Saídas: relés (aquecimento GPIO17, filtro GPIO18) ----------------
 switch:
   # Liga/desliga manual da bomba pelo HA (troca o Modo para Ligado/Desligado;
   # para voltar ao controle automático, selecione Modo = Automático)
@@ -329,20 +357,32 @@ switch:
     restore_mode: ALWAYS_OFF
     on_turn_on:
       - lambda: id(ultima_mudanca) = millis();
-      - lvgl.label.update:
-          id: lbl_bomba
-          text: "BOMBA LIGADA"
-      - lvgl.widget.update:
-          id: caixa_bomba
-          bg_color: ${cor_on}
+      - script.execute: atualizar_saidas
     on_turn_off:
       - lambda: id(ultima_mudanca) = millis();
-      - lvgl.label.update:
-          id: lbl_bomba
-          text: "BOMBA DESLIGADA"
-      - lvgl.widget.update:
-          id: caixa_bomba
-          bg_color: ${cor_off}
+      - script.execute: atualizar_saidas
+
+  # Relé da bomba do filtro (comando direto pelo HA ou pela tela; volta ao último estado após reiniciar)
+  - platform: gpio
+    id: rele_filtro
+    name: "Bomba filtro"
+    icon: mdi:pump
+    pin: GPIO18
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - script.execute: atualizar_saidas
+    on_turn_off:
+      - script.execute: atualizar_saidas
+
+# Botões no HA
+button:
+  - platform: template
+    name: "Acender tela"
+    icon: mdi:monitor
+    on_press:
+      - script.execute: acender_tela
+  - platform: restart
+    name: "Reiniciar"
 
 binary_sensor:
   - platform: template
@@ -537,6 +577,11 @@ sensor:
           id: lbl_delta
           text: !lambda 'return isnan(x) ? std::string("--.-°C") : str_sprintf("%+.1f°C", x);'
 
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+
   - platform: wifi_signal
     id: wifi_dbm
     name: "Wi-Fi sinal"
@@ -577,6 +622,35 @@ interval:
       - script.execute: avaliar
 
 script:
+  # Acorda a tela (toque com a tela apagada ou botão "Acender tela" do HA); apaga após 2 min sem toque
+  - id: acender_tela
+    then:
+      - lvgl.resume:
+      - lvgl.widget.redraw:
+      - light.turn_on: backlight
+
+  # Atualiza as caixas de aquecimento e filtro conforme o estado dos relés
+  - id: atualizar_saidas
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: return id(ui_pronto);
+          then:
+            - lvgl.label.update:
+                id: lbl_bomba
+                text: !lambda 'return std::string(id(rele_bomba).state ? "AQUECIMENTO\nLIGADO" : "AQUECIMENTO\nDESLIGADO");'
+            - lvgl.widget.update:
+                id: caixa_bomba
+                bg_color: !lambda 'return lv_color_hex(id(rele_bomba).state ? ${cor_on} : ${cor_off});'
+            - lvgl.label.update:
+                id: lbl_filtro
+                text: !lambda 'return std::string(id(rele_filtro).state ? "FILTRO\nLIGADO" : "FILTRO\nDESLIGADO");'
+            - lvgl.widget.update:
+                id: btn_filtro
+                bg_color: !lambda 'return lv_color_hex(id(rele_filtro).state ? ${cor_on} : ${cor_off});'
+
   - id: atualizar_botoes_modo
     then:
       - lvgl.widget.update:

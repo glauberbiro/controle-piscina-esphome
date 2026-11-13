@@ -14,7 +14,7 @@ Controlador diferencial de aquecimento solar de piscina em **ESPHome**, feito pa
 | Arquivo | O que é |
 |---|---|
 | [`esphome/controle-piscina.yaml`](esphome/controle-piscina.yaml) | Placa atual: ESP32 DevKit + OLED SSD1306 128×64 |
-| [`esphome/controle-piscina-s3.yaml`](esphome/controle-piscina-s3.yaml) | Placa definitiva: Waveshare ESP32-S3-Touch-LCD-2 (tela LVGL com touch) — ainda sem o relé do filtro |
+| [`esphome/controle-piscina-s3.yaml`](esphome/controle-piscina-s3.yaml) | Placa definitiva: Waveshare ESP32-S3-Touch-LCD-2 (tela LVGL com touch, mesmos recursos da ESP32) — ainda não testada na placa |
 | [`esphome/secrets.yaml.example`](esphome/secrets.yaml.example) | Modelo dos segredos (Wi-Fi, chave da API, senha do OTA) |
 | [`homeassistant/automacao-avisos-reparos.yaml`](homeassistant/automacao-avisos-reparos.yaml) | Automação que publica falhas em Configurações → Reparos (requer Spook) |
 
@@ -61,8 +61,10 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 | NTC piscina | GPIO6 | P1-3 |
 | NTC coletor | GPIO7 | P1-9 |
 | Relé aquecimento | GPIO17 | P1-5 |
-| Relé filtro (a incluir) | GPIO18 | P1-6 |
+| Relé filtro | GPIO18 | P1-6 |
 | 5V dos relés | 5V | P1-14 |
 | 3V3 dos divisores | 3V3 | P2-1 |
+
+Na tela: temperaturas, diferença, Wi-Fi, estado, caixas de **aquecimento** (indicação) e **filtro** (tocar liga/desliga) e os botões de modo AUTO / LIGAR / DESL. A tela apaga após 2 min sem toque; um toque (ou o botão "Acender tela" do HA) acorda.
 
 Manual do Tholz MMZ e esquema da Waveshare: veja os sites dos fabricantes ([tholz.com.br](http://www.tholz.com.br), [Waveshare/Spotpear wiki](https://spotpear.com/wiki/ESP32-S3-Touch-LCD-2-User-Guide.html)).
