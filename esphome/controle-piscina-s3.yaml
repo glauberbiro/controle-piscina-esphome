@@ -3,11 +3,12 @@
 # 2 NTC 10K + 2 relés (contatores da bomba de aquecimento e da bomba do filtro)
 # Toda a lógica do aquecimento roda no ESP: funciona mesmo sem Wi-Fi/Home Assistant.
 #
-# Ligações no conector:
-#   NTC piscina          -> GPIO6  (P1-3)     3V3 dos divisores -> P2-1
-#   NTC coletor          -> GPIO7  (P1-9)     GND               -> P1-13 / P2-2
-#   Relé aquecimento IN  -> GPIO17 (P1-5)     5V dos relés      -> P1-14
-#   Relé filtro IN       -> GPIO18 (P1-6)
+# Ligações (numeração oficial Waveshare 1–28, vista de trás com USB-C para baixo):
+#   NTC piscina          -> GPIO6  (pino 26)    3V3 dos divisores -> pino 1
+#   NTC coletor          -> GPIO7  (pino 20)    GND dos NTC       -> pino 2
+#   Relé aquecimento IN  -> GPIO17 (pino 24)    5V dos relés      -> pino 15
+#   Relé filtro IN       -> GPIO18 (pino 23)    GND dos relés     -> pino 16
+#   Não usar GPIO47/48 (pinos 5 e 6): são do touch
 # Divisor de cada NTC: 3V3 --- 10k (1%) --- [GPIO] --- NTC --- GND  (+100 nF do GPIO ao GND)
 
 substitutions:

@@ -56,14 +56,20 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 
 ## Placa Waveshare ESP32-S3-Touch-LCD-2
 
-| Função | GPIO | Conector |
+| Função | GPIO | Pino (numeração oficial 1–28) |
 |---|---|---|
-| NTC piscina | GPIO6 | P1-3 |
-| NTC coletor | GPIO7 | P1-9 |
-| Relé aquecimento | GPIO17 | P1-5 |
-| Relé filtro | GPIO18 | P1-6 |
-| 5V dos relés | 5V | P1-14 |
-| 3V3 dos divisores | 3V3 | P2-1 |
+| NTC piscina | GPIO6 | 26 |
+| NTC coletor | GPIO7 | 20 |
+| Relé aquecimento | GPIO17 | 24 |
+| Relé filtro | GPIO18 | 23 |
+| 5V dos relés | 5V | 15 |
+| GND dos relés | GND | 16 |
+| 3V3 dos divisores | 3V3 | 1 |
+| GND dos NTC | GND | 2 |
+
+Não use GPIO47/48 (pinos 5 e 6): são do touch. Diagrama: [`docs/ligacoes-waveshare-s3.png`](docs/ligacoes-waveshare-s3.png)
+
+![Ligações Waveshare](docs/ligacoes-waveshare-s3.png)
 
 Na tela: temperaturas, diferença, Wi-Fi, estado, caixas de **aquecimento** (indicação) e **filtro** (tocar liga/desliga) e os botões de modo AUTO / LIGAR / DESL. A tela apaga após 2 min sem toque; um toque (ou o botão "Acender tela" do HA) acorda.
 
