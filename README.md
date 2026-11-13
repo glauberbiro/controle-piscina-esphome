@@ -34,6 +34,8 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 
 ## Ligações — ESP32 DevKit
 
+![Ligações ESP32 DevKit](docs/ligacoes-esp32-devkit.png)
+
 | Componente | Pino do componente | ESP32 |
 |---|---|---|
 | NTC piscina | 10k 1% do 3V3 ao ponto do meio · ponto do meio · outra ponta do NTC | 3V3 · IO34 · GND |
@@ -66,6 +68,8 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 | GND dos relés | GND | 16 |
 | 3V3 dos divisores | 3V3 | 1 |
 | GND dos NTC | GND | 2 |
+
+![Ligações Waveshare ESP32-S3-Touch-LCD-2](docs/ligacoes-waveshare-s3.png)
 
 Não use GPIO47/48 (pinos 5 e 6): são do touch. Pinagem oficial da placa: [wiki da Waveshare/Spotpear](https://spotpear.com/wiki/ESP32-S3-Touch-LCD-2-User-Guide.html).
 
