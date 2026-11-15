@@ -78,9 +78,9 @@ display:
       temp(0, TextAlign::TOP_LEFT, id(t_piscina).state);
       temp(127, TextAlign::TOP_RIGHT, id(t_coletor).state);
       it.horizontal_line(0, 38, 128);
-      // Linha 3: bombas de aquecimento e do filtro
-      it.printf(0, 40, id(f_peq), "Aquec. %s", id(rele_bomba).state ? "ON" : "off");
-      it.printf(127, 40, id(f_peq), TextAlign::TOP_RIGHT, "Filtro %s", id(rele_filtro).state ? "ON" : "off");
+      // Linha 3: bombas do filtro (esquerda) e de aquecimento (direita)
+      it.printf(0, 40, id(f_peq), "Filtro %s", id(rele_filtro).state ? "ON" : "off");
+      it.printf(127, 40, id(f_peq), TextAlign::TOP_RIGHT, "Aquec. %s", id(rele_bomba).state ? "ON" : "off");
       // Linha 4: diferencial e, alternando a cada 4 s, modo / Wi-Fi
       const float d = id(t_coletor).state - id(t_piscina).state;
       if (isnan(d)) it.print(0, 52, id(f_peq), "Dif --");
