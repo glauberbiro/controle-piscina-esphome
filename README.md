@@ -1,6 +1,6 @@
 # Controle Piscina (ESPHome)
 
-> ⚠️ **Projeto em teste.** Ainda está na bancada (ESP32 de teste, sensores NTC ainda não instalados) e não substituiu o Tholz MMZ na piscina. As seguranças ainda não foram testadas com temperaturas reais. Use por sua conta e risco e mantenha as proteções elétricas (relé térmico e DR).
+> ⚠️ **Projeto em teste de aplicação.** Foi testado em bancada por 7 dias (9 a 15/nov/2026) e, desde 15/nov/2026, está instalado na piscina, no lugar do Tholz MMZ, comandando as bombas de aquecimento e do filtro em modo automático. Segue em observação; a calibração fina dos NTC ainda será feita. Use por sua conta e risco e mantenha as proteções elétricas (relé térmico e DR).
 
 Controlador diferencial de aquecimento solar de piscina em **ESPHome**, feito para substituir um **Tholz MMZ1195N** — e que também comanda a **bomba do filtro**. Toda a lógica do aquecimento roda no próprio ESP32: continua funcionando sem Wi-Fi ou Home Assistant.
 
@@ -13,7 +13,7 @@ Controlador diferencial de aquecimento solar de piscina em **ESPHome**, feito pa
 
 | Arquivo | O que é |
 |---|---|
-| [`esphome/controle-piscina.yaml`](esphome/controle-piscina.yaml) | Placa atual: ESP32 DevKit + OLED SSD1306 128×64 |
+| [`esphome/controle-piscina.yaml`](esphome/controle-piscina.yaml) | Placa atual (em uso na piscina): ESP32 DevKit + OLED SSD1306 128×64 |
 | [`esphome/controle-piscina-s3.yaml`](esphome/controle-piscina-s3.yaml) | Placa definitiva: Waveshare ESP32-S3-Touch-LCD-2 (tela LVGL com touch, mesmos recursos da ESP32) — ainda não testada na placa |
 | [`esphome/secrets.yaml.example`](esphome/secrets.yaml.example) | Modelo dos segredos (Wi-Fi, chave da API, senha do OTA) |
 | [`homeassistant/automacao-avisos-reparos.yaml`](homeassistant/automacao-avisos-reparos.yaml) | Automação que publica falhas em Configurações → Reparos (requer Spook) |
