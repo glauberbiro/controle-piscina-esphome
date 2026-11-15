@@ -155,8 +155,8 @@ lvgl:
   touchscreens: [touch]
   buffer_size: 25%
   on_idle:
-    # Apaga a tela após 2 min sem toque
-    timeout: 120s
+    # Apaga a tela após 10 min sem toque (tela IPS: não tem burn-in; apagar só poupa o backlight)
+    timeout: 10min
     then:
       - light.turn_off: backlight
       - lvgl.pause:
@@ -623,7 +623,7 @@ interval:
       - script.execute: avaliar
 
 script:
-  # Acorda a tela (toque com a tela apagada ou botão "Acender tela" do HA); apaga após 2 min sem toque
+  # Acorda a tela (toque com a tela apagada ou botão "Acender tela" do HA); apaga após 10 min sem toque
   - id: acender_tela
     then:
       - lvgl.resume:

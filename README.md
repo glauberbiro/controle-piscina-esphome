@@ -53,7 +53,7 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 
 ## Botão e LED
 
-- Toque curto: acende a tela por 60 s · segurar 2 s: troca o modo (Automático → Ligado → Desligado)
+- Toque curto: acende a tela (fica acesa pelo "Tempo tela acesa", padrão 10 min, ajustável no HA) · segurar 2 s: troca o modo (Automático → Ligado → Desligado)
 - LED pisca lento: Wi-Fi e Home Assistant conectados · pisca rápido: sem rede
 
 ## Placa Waveshare ESP32-S3-Touch-LCD-2
@@ -73,6 +73,6 @@ Os valores entre parênteses são os padrões; todos são ajustáveis no Home As
 
 Não use GPIO47/48 (pinos 5 e 6): são do touch. Pinagem oficial da placa: [wiki da Waveshare/Spotpear](https://spotpear.com/wiki/ESP32-S3-Touch-LCD-2-User-Guide.html).
 
-Na tela: temperaturas, diferença, Wi-Fi, estado, caixas de **aquecimento** (indicação) e **filtro** (tocar liga/desliga) e os botões de modo AUTO / LIGAR / DESL. A tela apaga após 2 min sem toque; um toque (ou o botão "Acender tela" do HA) acorda.
+Na tela: temperaturas, diferença, Wi-Fi, estado, caixas de **aquecimento** (indicação) e **filtro** (tocar liga/desliga) e os botões de modo AUTO / LIGAR / DESL. A tela apaga após 10 min sem toque; um toque (ou o botão "Acender tela" do HA) acorda.
 
 Manual do Tholz MMZ e esquema da Waveshare: veja os sites dos fabricantes ([tholz.com.br](http://www.tholz.com.br), [Waveshare/Spotpear wiki](https://spotpear.com/wiki/ESP32-S3-Touch-LCD-2-User-Guide.html)).

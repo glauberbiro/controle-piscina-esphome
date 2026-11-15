@@ -292,6 +292,19 @@ number:
     optimistic: true
     restore_value: true
     entity_category: config
+  # Quanto tempo a tela OLED fica acesa depois de acordar
+  - platform: template
+    id: tempo_tela
+    name: "Tempo tela acesa"
+    icon: mdi:monitor-shimmer
+    unit_of_measurement: "min"
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
 
 # ---------------- Sensores NTC ----------------
 # Divisor: 3V3 --- 10k (1%) --- [GPIO] --- NTC --- GND   (+100 nF do GPIO ao GND)
@@ -419,12 +432,13 @@ interval:
           if (aceso) id(led_placa).turn_on(); else id(led_placa).turn_off();
 
 script:
-  # Tela fica acesa 60 s após o boot, o botão físico ou o 'Acender tela' do HA, depois apaga (evita burn-in)
+  # Tela fica acesa pelo "Tempo tela acesa" após o boot, o botão físico ou o 'Acender tela' do HA,
+  # depois apaga (OLED: evita burn-in)
   - id: acender_tela
     mode: restart
     then:
       - lambda: id(tela).turn_on();
-      - delay: 60s
+      - delay: !lambda 'return (uint32_t) (id(tempo_tela).state * 60000.0f);'
       - lambda: id(tela).turn_off();
 
   - id: avaliar
