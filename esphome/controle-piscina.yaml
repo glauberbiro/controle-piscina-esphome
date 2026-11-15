@@ -115,6 +115,10 @@ globals:
   - id: bloqueio_sobreaq
     type: bool
     initial_value: "false"
+  # Quando a bomba do filtro ligou, para o tempo máximo
+  - id: inicio_filtro
+    type: uint32_t
+    initial_value: "0"
 
 # ---------------- Saídas: relés (aquecimento GPIO26, filtro GPIO27) ----------------
 switch:
@@ -154,12 +158,15 @@ switch:
       - lambda: id(ultima_mudanca) = millis();
 
   # Relé da bomba do filtro (comando direto pelo HA; volta ao último estado após reiniciar)
+  # Desliga sozinha após o "Tempo máximo filtro" (padrão 6 h), mesmo sem HA
   - platform: gpio
     id: rele_filtro
     name: "Bomba filtro"
     icon: mdi:pump
     pin: GPIO27
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: id(inicio_filtro) = millis();
 
 # Botões no HA (além do botão físico no IO14)
 button:
@@ -305,6 +312,19 @@ number:
     optimistic: true
     restore_value: true
     entity_category: config
+  # Tempo máximo que a bomba do filtro pode ficar ligada direto
+  - platform: template
+    id: tempo_max_filtro
+    name: "Tempo máximo filtro"
+    icon: mdi:timer-cog-outline
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 12
+    step: 0.5
+    initial_value: 6
+    optimistic: true
+    restore_value: true
+    entity_category: config
 
 # ---------------- Sensores NTC ----------------
 # Divisor: 3V3 --- 10k (1%) --- [GPIO] --- NTC --- GND   (+100 nF do GPIO ao GND)
@@ -421,6 +441,16 @@ interval:
   - interval: 10s
     then:
       - script.execute: avaliar
+  # Limite de tempo da bomba do filtro
+  - interval: 30s
+    then:
+      - lambda: |-
+          if (!id(rele_filtro).state) return;
+          const uint32_t limite_ms = (uint32_t) (id(tempo_max_filtro).state * 3600000.0f);
+          if ((millis() - id(inicio_filtro)) >= limite_ms) {
+            ESP_LOGW("controle", "Bomba do filtro desligada: tempo máximo atingido");
+            id(rele_filtro).turn_off();
+          }
   - interval: 100ms
     then:
       - lambda: |-
