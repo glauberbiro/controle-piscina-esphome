@@ -336,10 +336,11 @@ sensor:
     id: adc_piscina
     pin: GPIO34
     attenuation: 12db
-    update_interval: 2s
+    update_interval: 1s
     filters:
+      # mediana de 9 leituras (1 s) descarta picos de ruído; saída a cada 5 s
       - median:
-          window_size: 5
+          window_size: 9
           send_every: 5
   - platform: resistance
     id: res_piscina
@@ -362,19 +363,22 @@ sensor:
       reference_resistance: 10kOhm
     filters:
       - offset: 0.0   # ajuste fino comparando com termômetro
+      # A água muda devagar: média de 5 min (60 x 5 s), publicada a cada 30 s.
+      # Elimina as ondas de ruído induzidas pelo cabo que desce junto com a força.
       - sliding_window_moving_average:
-          window_size: 3
-          send_every: 1
+          window_size: 60
+          send_every: 6
 
   # Coletores
   - platform: adc
     id: adc_coletor
     pin: GPIO35
     attenuation: 12db
-    update_interval: 2s
+    update_interval: 1s
     filters:
+      # mediana de 9 leituras (1 s) descarta picos de ruído; saída a cada 5 s
       - median:
-          window_size: 5
+          window_size: 9
           send_every: 5
   - platform: resistance
     id: res_coletor
@@ -396,9 +400,10 @@ sensor:
       reference_resistance: 10kOhm
     filters:
       - offset: 0.0
+      # Coletor reage ao sol: filtro mais leve, média de 30 s (6 x 5 s) a cada 10 s
       - sliding_window_moving_average:
-          window_size: 3
-          send_every: 1
+          window_size: 6
+          send_every: 2
 
   - platform: template
     name: "Diferencial coletor-piscina"
