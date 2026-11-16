@@ -332,6 +332,8 @@ switch:
     name: "Bomba aquecimento"
     icon: mdi:pump
     lambda: return id(rele_bomba).state;
+    # DISABLED: no boot NÃO executa o turn_off_action (senão o Modo voltava para Desligado a cada reinício)
+    restore_mode: DISABLED
     turn_on_action:
       - select.set:
           id: modo
