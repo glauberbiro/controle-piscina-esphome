@@ -436,12 +436,30 @@ sensor:
     filters:
       # -100 dBm = 0%  ...  -50 dBm = 100%
       - lambda: return std::min(std::max(2.0f * (x + 100.0f), 0.0f), 100.0f);
+  - platform: debug
+    free:
+      name: Memória livre
+      id: debug_free
+      entity_category: diagnostic
+    loop_time:
+      name: Tempo do loop
+      id: debug_loop_time
+      entity_category: diagnostic
+    min_free:
+      name: Memória livre mínima
+      id: debug_min_free
+      entity_category: diagnostic
 
 text_sensor:
   - platform: template
     id: estado
     name: "Estado"
     icon: mdi:information-outline
+  - platform: debug
+    reset_reason:
+      name: Motivo do último reinício
+      id: debug_reset_reason
+      entity_category: diagnostic
 
 # ---------------- Lógica ----------------
 interval:
@@ -540,3 +558,6 @@ script:
           if (quer && !ligada) id(rele_bomba).turn_on();
           if (!quer && ligada) id(rele_bomba).turn_off();
           if (id(estado).state != motivo) id(estado).publish_state(motivo);
+
+debug:
+  update_interval: 60s
