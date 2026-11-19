@@ -78,6 +78,10 @@ globals:
   - id: bloqueio_sobreaq
     type: bool
     initial_value: "false"
+  # Quando a bomba do filtro ligou, para o tempo máximo
+  - id: inicio_filtro
+    type: uint32_t
+    initial_value: "0"
   # A tela só é atualizada depois do boot (os relés mudam de estado antes de o LVGL existir)
   - id: ui_pronto
     type: bool
@@ -373,6 +377,7 @@ switch:
     pin: GPIO18
     restore_mode: RESTORE_DEFAULT_OFF
     on_turn_on:
+      - lambda: id(inicio_filtro) = millis();
       - script.execute: atualizar_saidas
     on_turn_off:
       - script.execute: atualizar_saidas
@@ -484,6 +489,19 @@ number:
     min_value: 1
     max_value: 24
     step: 1
+    initial_value: 6
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  # Tempo máximo que a bomba do filtro pode ficar ligada direto
+  - platform: template
+    id: tempo_max_filtro
+    name: "Tempo máximo filtro"
+    icon: mdi:timer-cog-outline
+    unit_of_measurement: "h"
+    min_value: 1
+    max_value: 12
+    step: 0.5
     initial_value: 6
     optimistic: true
     restore_value: true
@@ -613,7 +631,22 @@ sensor:
           id: lbl_wifi
           text: !lambda 'return isnan(x) ? std::string("Wi-Fi --") : str_sprintf("Wi-Fi %.0f%%", x);'
 
+  - platform: debug
+    free:
+      name: Memória livre
+      entity_category: diagnostic
+    min_free:
+      name: Memória livre mínima
+      entity_category: diagnostic
+    loop_time:
+      name: Tempo do loop
+      entity_category: diagnostic
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: Motivo do último reinício
+      entity_category: diagnostic
   - platform: template
     id: estado
     name: "Estado"
@@ -628,6 +661,16 @@ interval:
   - interval: 10s
     then:
       - script.execute: avaliar
+  # Limite de tempo da bomba do filtro
+  - interval: 30s
+    then:
+      - lambda: |-
+          if (!id(rele_filtro).state) return;
+          const uint32_t limite_ms = (uint32_t) (id(tempo_max_filtro).state * 3600000.0f);
+          if ((millis() - id(inicio_filtro)) >= limite_ms) {
+            ESP_LOGW("controle", "Bomba do filtro desligada: tempo máximo atingido");
+            id(rele_filtro).turn_off();
+          }
 
 script:
   # Acorda a tela (toque com a tela apagada ou botão "Acender tela" do HA); apaga após 10 min sem toque
@@ -736,3 +779,6 @@ script:
           if (quer && !ligada) id(rele_bomba).turn_on();
           if (!quer && ligada) id(rele_bomba).turn_off();
           if (id(estado).state != motivo) id(estado).publish_state(motivo);
+
+debug:
+  update_interval: 60s
